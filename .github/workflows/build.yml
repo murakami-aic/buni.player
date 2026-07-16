@@ -50,9 +50,17 @@ jobs:
         run: |
           $dir = "src-tauri\target\${{ matrix.target }}\release"
           $name = "${{ matrix.target }}"
-          $exe = Get-ChildItem "$dir\buni-player.exe" | Select-Object -First 1
-          if (-not $exe) { Write-Error "buni-player.exe not found in $dir"; exit 1 }
-          $sidecar = Get-ChildItem "$dir\yt-dlp-*.exe" | Select-Object -First 1
+          $exe = Get-ChildItem "$dir\buni-player.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host "Files in $dir :"
+            Get-ChildItem $dir -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name)" }
+            throw "buni-player.exe not found in $dir"
+          }
+          $sidecar = Get-ChildItem "$dir\yt-dlp-*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $sidecar) {
+            $sidecar = Get-ChildItem "src-tauri\binaries\yt-dlp-*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          }
+          if (-not $sidecar) { throw "yt-dlp sidecar not found"; exit 1 }
           Compress-Archive -Path $exe.FullName, $sidecar.FullName -DestinationPath "buni-$name.zip"
 
       - name: Package macOS
