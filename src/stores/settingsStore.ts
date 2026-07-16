@@ -15,6 +15,7 @@ interface SettingsState {
   lastfmEnabled: boolean;
   maxConcurrentDownloads: number;
   streamUrlCacheHours: number;
+  cookiesBrowser: string;
   theme: Theme;
   lang: Lang;
   panelView: PanelView | null;
@@ -38,6 +39,7 @@ const DEFAULTS = {
   lastfmEnabled: true,
   maxConcurrentDownloads: 3,
   streamUrlCacheHours: 5,
+  cookiesBrowser: "",
   theme: "dark" as Theme,
   lang: "es" as Lang,
   panelView: null as PanelView | null,

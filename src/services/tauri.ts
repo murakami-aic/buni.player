@@ -107,3 +107,7 @@ export async function invokeUpdateYtdlp(): Promise<string> {
 export async function invokeGetDefaultDownloadFolder(): Promise<string> {
   return invoke<string>("get_default_download_folder");
 }
+
+export async function invokeAutoDetectCookies(): Promise<string> {
+  return invoke<string>("auto_detect_cookies");
+}

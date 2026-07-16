@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, ExternalLink, Check, X, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { invokeGetYtdlpVersion, invokeUpdateYtdlp, invokeGetDefaultDownloadFolder } from "../../services/tauri";
+import { invokeGetYtdlpVersion, invokeUpdateYtdlp, invokeGetDefaultDownloadFolder, invokeAutoDetectCookies } from "../../services/tauri";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -20,6 +20,7 @@ export function Settings() {
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const setMainView = useSettingsStore((s) => s.setMainView);
   const downloadFolder = useSettingsStore((s) => s.downloadFolder);
+  const cookiesBrowser = useSettingsStore((s) => s.cookiesBrowser);
 
   const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
@@ -259,8 +260,41 @@ export function Settings() {
                 </span>
               </div>
             )}
+
+            <div className="space-y-1 pt-2">
+              <label className="text-sm text-neutral">{t("settings.cookies_browser")}</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={cookiesBrowser}
+                  onChange={(e) => updateSetting("cookiesBrowser", e.currentTarget.value)}
+                  className="flex-1 rounded-md px-2 py-1.5 h-9 text-sm text-foreground bg-accent border border-transparent focus:outline-none focus:ring-2 focus:ring-accent-foreground"
+                >
+                  <option value="">{t("settings.cookies_auto_detect")}</option>
+                  <option value="none">{t("settings.cookies_none")}</option>
+                  <option value="chrome">Chrome</option>
+                  <option value="firefox">Firefox</option>
+                  <option value="edge">Edge</option>
+                  <option value="brave">Brave</option>
+                  <option value="opera">Opera</option>
+                  <option value="vivaldi">Vivaldi</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const detected = await invokeAutoDetectCookies();
+                    await updateSetting("cookiesBrowser", detected);
+                  }}
+                  className="px-3 py-1 text-xs rounded bg-accent-list hover:bg-accent text-foreground transition"
+                >
+                  {t("settings.cookies_redetect")}
+                </button>
+              </div>
+              <p className="text-xs text-neutral">{t("settings.cookies_hint")}</p>
+            </div>
           </div>
         </div>
+
+        <div className="flex-1 min-h-[32px]"></div>
 
 
       </div>

@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_store::StoreExt;
 
 pub struct VideoMetadata {
     pub title: String,
@@ -14,13 +15,127 @@ pub struct VideoMetadata {
     pub has_video: bool,
 }
 
+fn detect_cookies_browser() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let local = std::env::var("LOCALAPPDATA").ok()?;
+        let roaming = std::env::var("APPDATA").ok();
+
+        let browsers: &[(&str, &str)] = &[
+            ("chrome", &format!("{local}\\Google\\Chrome\\User Data")),
+            ("edge", &format!("{local}\\Microsoft\\Edge\\User Data")),
+            ("brave", &format!("{local}\\BraveSoftware\\Brave-Browser\\User Data")),
+            ("vivaldi", &format!("{local}\\Vivaldi\\User Data")),
+            ("opera", &roaming.as_ref().map(|r| format!("{r}\\Opera Software\\Opera Stable")).unwrap_or_default()),
+            ("firefox", &roaming.as_ref().map(|r| format!("{r}\\Mozilla\\Firefox\\Profiles")).unwrap_or_default()),
+        ];
+
+        for (name, path) in browsers {
+            if std::path::Path::new(path).exists() {
+                return Some(name.to_string());
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").ok()?;
+        let browsers: &[(&str, &str)] = &[
+            ("chrome", &format!("{home}/Library/Application Support/Google/Chrome")),
+            ("edge", &format!("{home}/Library/Application Support/Microsoft Edge")),
+            ("brave", &format!("{home}/Library/Application Support/BraveSoftware/Brave-Browser")),
+            ("firefox", &format!("{home}/Library/Application Support/Firefox/Profiles")),
+        ];
+        for (name, path) in browsers {
+            if std::path::Path::new(path).exists() {
+                return Some(name.to_string());
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let home = std::env::var("HOME").ok()?;
+        let browsers: &[(&str, &str)] = &[
+            ("chrome", &format!("{home}/.config/google-chrome")),
+            ("chromium", &format!("{home}/.config/chromium")),
+            ("edge", &format!("{home}/.config/microsoft-edge")),
+            ("brave", &format!("{home}/.config/BraveSoftware/Brave-Browser")),
+            ("firefox", &format!("{home}/.mozilla/firefox")),
+        ];
+        for (name, path) in browsers {
+            if std::path::Path::new(path).exists() {
+                return Some(name.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn resolve_cookies_browser(app: &AppHandle) -> String {
+    let mut browser = app
+        .store("settings.json")
+        .ok()
+        .and_then(|store| {
+            store
+                .get("cookiesBrowser")
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+        })
+        .unwrap_or_default();
+
+    if browser.is_empty() {
+        if let Some(detected) = detect_cookies_browser() {
+            if let Ok(store) = app.store("settings.json") {
+                let _ = store.set(
+                    "cookiesBrowser",
+                    serde_json::Value::String(detected.clone()),
+                );
+                let _ = store.save();
+            }
+            browser = detected;
+        }
+    }
+    browser
+}
+
+pub fn ensure_cookies_detected(app: &AppHandle) {
+    resolve_cookies_browser(app);
+}
+
+fn get_cookies_args(app: &AppHandle) -> Vec<String> {
+    let browser = resolve_cookies_browser(app);
+    if browser.is_empty() || browser == "none" {
+        vec![]
+    } else {
+        vec![
+            "--cookies-from-browser".to_string(),
+            browser,
+        ]
+    }
+}
+
+#[tauri::command]
+pub fn auto_detect_cookies(app: AppHandle) -> String {
+    let detected = detect_cookies_browser().unwrap_or_default();
+    if let Ok(store) = app.store("settings.json") {
+        let _ = store.set(
+            "cookiesBrowser",
+            serde_json::Value::String(detected.clone()),
+        );
+        let _ = store.save();
+    }
+    detected
+}
+
 pub async fn get_metadata(
     app: &AppHandle,
     source_url: &str,
     child_slot: &Mutex<Option<CommandChild>>,
     no_playlist: bool,
-) -> Result<Vec<VideoMetadata>, String> {
+) -> Result<(Vec<VideoMetadata>, usize), String> {
     let mut args: Vec<String> = vec![
+        "--ignore-errors".into(),
         "--no-download".into(),
         "--print".into(),
         "%(title)s\t%(duration)s\t%(thumbnail)s\t%(uploader)s\t%(channel)s\t%(vcodec)s\t%(extractor)s\t%(webpage_url)s".into(),
@@ -30,7 +145,8 @@ pub async fn get_metadata(
     }
     args.push(source_url.to_string());
     let str_args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let output = run_ytdlp_cancellable(app, &str_args, child_slot).await?;
+    let (output, stderr) = run_ytdlp_cancellable(app, &str_args, child_slot).await?;
+    let age_skipped = stderr.matches("Sign in to confirm your age").count();
 
     let mut results = Vec::new();
     for line in output.lines() {
@@ -67,14 +183,14 @@ pub async fn get_metadata(
         });
     }
 
-    Ok(results)
+    Ok((results, age_skipped))
 }
 
 async fn run_ytdlp_cancellable(
     app: &AppHandle,
     args: &[&str],
     child_slot: &Mutex<Option<CommandChild>>,
-) -> Result<String, String> {
+) -> Result<(String, String), String> {
     let sidecar = app
         .shell()
         .sidecar("yt-dlp")
@@ -83,10 +199,15 @@ async fn run_ytdlp_cancellable(
             i18n::t("error.ytdlp.not_found")
         })?;
 
-    let mut all_args = vec!["--js-runtimes", "node", "--js-runtimes", "deno"];
-    all_args.extend_from_slice(args);
+    let mut all_args: Vec<String> = vec![
+        "--js-runtimes".into(), "node".into(),
+        "--js-runtimes".into(), "deno".into(),
+    ];
+    all_args.extend(get_cookies_args(app));
+    for a in args { all_args.push(a.to_string()); }
+    let str_refs: Vec<&str> = all_args.iter().map(|s| s.as_str()).collect();
     let (mut rx, child) = sidecar
-        .args(&all_args)
+        .args(&str_refs)
         .spawn()
         .map_err(|e| {
             eprintln!("Failed to spawn yt-dlp: {}", e);
@@ -115,12 +236,15 @@ async fn run_ytdlp_cancellable(
                         payload.code, stderr_output
                     );
                     *child_slot.lock().unwrap() = None;
+                    if stderr_output.contains("Sign in to confirm your age") {
+                        return Err(i18n::t("error.ytdlp.age_restricted"));
+                    }
                     return Err(i18n::t("error.ytdlp.generic"));
                 }
                 break;
             }
             CommandEvent::Error(err) => {
-                eprintln!("yt-dlp process error: {}", err);
+                    eprintln!("yt-dlp process error: {}", err);
                 *child_slot.lock().unwrap() = None;
                 return Err(i18n::t("error.ytdlp.process_error"));
             }
@@ -129,7 +253,7 @@ async fn run_ytdlp_cancellable(
     }
 
     *child_slot.lock().unwrap() = None;
-    Ok(stdout_lines.join("\n"))
+    Ok((stdout_lines.join("\n"), stderr_output))
 }
 
 pub async fn get_stream_url(app: &AppHandle, source_url: &str) -> Result<String, String> {
@@ -170,30 +294,25 @@ pub async fn download_audio(
         })?;
 
     let progress_template = "%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s";
+    let mut dl_args: Vec<String> = vec![
+        "--no-playlist".into(),
+        "--js-runtimes".into(), "node".into(),
+        "--js-runtimes".into(), "deno".into(),
+        "-f".into(), "bestaudio[ext=m4a]/bestaudio/best".into(),
+        "-x".into(),
+        "--audio-format".into(), "m4a".into(),
+        "--audio-quality".into(), "0".into(),
+        "-o".into(), template.to_string(),
+        "--restrict-filenames".into(),
+        "--newline".into(),
+        "--progress-template".into(), progress_template.to_string(),
+        "--print".into(), "after_move:%(filepath)s".into(),
+        source_url.to_string(),
+    ];
+    dl_args.extend(get_cookies_args(app));
+    let dl_refs: Vec<&str> = dl_args.iter().map(|s| s.as_str()).collect();
     let (mut rx, _child) = sidecar
-        .args([
-            "--no-playlist",
-            "--js-runtimes",
-            "node",
-            "--js-runtimes",
-            "deno",
-            "-f",
-            "bestaudio[ext=m4a]/bestaudio/best",
-            "-x",
-            "--audio-format",
-            "m4a",
-            "--audio-quality",
-            "0",
-            "-o",
-            template,
-            "--restrict-filenames",
-            "--newline",
-            "--progress-template",
-            progress_template,
-            "--print",
-            "after_move:%(filepath)s",
-            source_url,
-        ])
+        .args(&dl_refs)
         .spawn()
         .map_err(|e| {
             eprintln!("Failed to spawn yt-dlp: {}", e);
@@ -250,6 +369,9 @@ pub async fn download_audio(
                         "yt-dlp exit code {:?}: {}",
                         payload.code, stderr_output
                     );
+                    if stderr_output.contains("Sign in to confirm your age") {
+                        return Err(i18n::t("error.ytdlp.age_restricted"));
+                    }
                     return Err(i18n::t("error.ytdlp.download_failed"));
                 }
                 break;
@@ -307,10 +429,15 @@ async fn run_ytdlp(app: &AppHandle, args: &[&str]) -> Result<String, String> {
             i18n::t("error.ytdlp.not_found")
         })?;
 
-    let mut all_args = vec!["--js-runtimes", "node", "--js-runtimes", "deno"];
-    all_args.extend_from_slice(args);
+    let mut all_args: Vec<String> = vec![
+        "--js-runtimes".into(), "node".into(),
+        "--js-runtimes".into(), "deno".into(),
+    ];
+    all_args.extend(get_cookies_args(app));
+    for a in args { all_args.push(a.to_string()); }
+    let str_refs: Vec<&str> = all_args.iter().map(|s| s.as_str()).collect();
     let output = sidecar
-        .args(&all_args)
+        .args(&str_refs)
         .output()
         .await
         .map_err(|e| {
@@ -321,6 +448,9 @@ async fn run_ytdlp(app: &AppHandle, args: &[&str]) -> Result<String, String> {
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         eprintln!("yt-dlp failed: {}", stderr);
+        if stderr.contains("Sign in to confirm your age") {
+            return Err(i18n::t("error.ytdlp.age_restricted"));
+        }
         return Err(i18n::t("error.ytdlp.generic"));
     }
 

@@ -4,6 +4,7 @@ import type { DownloadProgress } from "../types/download";
 import { useLibraryStore } from "../stores/libraryStore";
 import { usePlaylistStore } from "../stores/playlistStore";
 import { useToastStore } from "../stores/toastStore";
+import i18next from "../i18n";
 
 export function useTauriEvent() {
   const addTrack = useLibraryStore((state) => state.addTrack);
@@ -81,6 +82,10 @@ export function useTauriEvent() {
 
     safeListen<{ trackId: number; error: string }>("track:enrich-error", (payload) => {
       useToastStore.getState().addToast("error", payload.error);
+    });
+
+    safeListen<{ count: number }>("track:add-age-skipped", ({ count }) => {
+      useToastStore.getState().addToast("info", i18next.t("toast.age_skipped", { count }));
     });
 
     return () => {

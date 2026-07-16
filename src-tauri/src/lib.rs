@@ -48,6 +48,7 @@ pub fn run() {
             commands::lastfm::lastfm_search_track,
             services::ytdlp_update::get_ytdlp_version,
             services::ytdlp_update::update_ytdlp,
+            services::ytdlp::auto_detect_cookies,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -60,6 +61,8 @@ pub fn run() {
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
                 .unwrap_or_else(|| "es".to_string());
             i18n::set_language(&lang);
+
+            services::ytdlp::ensure_cookies_detected(&app.handle());
 
             app.deep_link().on_open_url(move |event| {
                 for url in event.urls() {

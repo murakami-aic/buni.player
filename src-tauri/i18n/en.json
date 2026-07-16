@@ -11,6 +11,7 @@
   "error.ytdlp.no_file_path": "yt-dlp did not return a file path.",
   "error.ytdlp.execute_failed": "Could not execute yt-dlp.",
   "error.ytdlp.generic": "yt-dlp failed. Content may not be available.",
+  "error.ytdlp.age_restricted": "This video requires age verification. Log into YouTube in your browser and the app will use your cookies automatically.",
   "error.playlist.track_exists": "This track is already in the playlist.",
   "error.lastfm.no_api_key": "Last.fm API key not configured. Add it in Settings.",
   "error.lastfm.not_found": "Track not found on Last.fm.",

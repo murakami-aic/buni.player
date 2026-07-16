@@ -29,8 +29,8 @@ pub async fn add_track(app: AppHandle, source_url: String) -> Result<Vec<Track>,
     *CANCEL_FLAG.lock().unwrap() = Some(cancel_flag.clone());
 
     let no_playlist = source_url.contains("list=RD");
-    let metadata_list = match ytdlp::get_metadata(&app, &source_url, &CHILD_SLOT, no_playlist).await {
-        Ok(list) => list,
+    let (metadata_list, age_skipped) = match ytdlp::get_metadata(&app, &source_url, &CHILD_SLOT, no_playlist).await {
+        Ok(tuple) => tuple,
         Err(e) => {
             *CANCEL_FLAG.lock().unwrap() = None;
             if cancel_flag.load(Ordering::Relaxed) {
@@ -146,6 +146,12 @@ pub async fn add_track(app: AppHandle, source_url: String) -> Result<Vec<Track>,
     *CANCEL_FLAG.lock().unwrap() = None;
 
     let added = tracks.len() as i64;
+    if age_skipped > 0 {
+        let _ = app.emit(
+            "track:add-age-skipped",
+            serde_json::json!({ "count": age_skipped }),
+        );
+    }
     let _ = app.emit(
         "track:add-complete",
         serde_json::json!({ "added": added, "skipped": skipped, "total": total }),
