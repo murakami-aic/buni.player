@@ -20,13 +20,12 @@ download() {
 # Windows
 download "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" "$BIN_DIR/yt-dlp-x86_64-pc-windows-msvc.exe"
 
-# macOS Intel
-download "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos_legacy" "$BIN_DIR/yt-dlp-x86_64-apple-darwin"
-chmod +x "$BIN_DIR/yt-dlp-x86_64-apple-darwin"
-
-# macOS ARM
+# macOS universal (works on both Intel and ARM)
 download "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos" "$BIN_DIR/yt-dlp-aarch64-apple-darwin"
 chmod +x "$BIN_DIR/yt-dlp-aarch64-apple-darwin"
+if [[ ! -f "$BIN_DIR/yt-dlp-x86_64-apple-darwin" ]]; then
+  cp "$BIN_DIR/yt-dlp-aarch64-apple-darwin" "$BIN_DIR/yt-dlp-x86_64-apple-darwin"
+fi
 
 # Linux
 download "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" "$BIN_DIR/yt-dlp-x86_64-unknown-linux-gnu"
