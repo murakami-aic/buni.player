@@ -1,0 +1,108 @@
+name: Build
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: app
+          - os: macos-13
+            target: x86_64-apple-darwin
+            bundles: app
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+      - name: Download yt-dlp sidecar
+        shell: bash
+        run: bash scripts/download-ytdlp.sh
+      - run: npm ci
+      - name: Build
+        uses: tauri-apps/tauri-action@v1
+        with:
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = "src-tauri\target\${{ matrix.target }}\release"
+          $name = "${{ matrix.target }}"
+          $exe = Get-ChildItem "$dir\buni.player.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Error "buni.player.exe not found in $dir"; exit 1 }
+          $sidecar = Get-ChildItem "$dir\yt-dlp-*.exe" | Select-Object -First 1
+          Compress-Archive -Path $exe.FullName, $sidecar.FullName -DestinationPath "buni-$name.zip"
+
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          name="${{ matrix.target }}"
+          app=$(find src-tauri/target/"$name"/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          if [ -z "$app" ]; then echo "app not found"; exit 1; fi
+          zip -r "buni-$name.zip" "$app"
+
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          name="${{ matrix.target }}"
+          appimg=$(ls src-tauri/target/"$name"/release/bundle/appimage/*.AppImage 2>/dev/null | head -1)
+          if [ -n "$appimg" ]; then cp "$appimg" "buni-$name.AppImage"; fi
+          deb=$(ls src-tauri/target/"$name"/release/bundle/deb/*.deb 2>/dev/null | head -1)
+          if [ -n "$deb" ]; then cp "$deb" "buni-$name.deb"; fi
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os != 'Linux'
+        with:
+          name: buni-${{ matrix.target }}
+          path: buni-*.zip
+
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: buni-${{ matrix.target }}
+          path: |
+            buni-*.AppImage
+            buni-*.deb
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v3
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.AppImage
+            artifacts/**/*.deb

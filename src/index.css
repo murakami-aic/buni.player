@@ -1,0 +1,200 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-neutral: hsl(var(--neutral));
+  --color-neutral-foreground: hsl(var(--neutral-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-list: hsl(var(--card) / .15);
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-input-foreground: hsl(var(--input-foreground));
+  --color-ring: hsl(var(--ring));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.5rem;
+  --overlay-opacity: 0.4;
+  --surface: 0 0% 40%;
+  --surface-foreground: 0 0% 0%;
+  --surface-alpha: 0.06;
+  --background: 0 0% 100%;
+  --foreground: 240 10% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+
+  --neutral: 240 5% 95.9%;
+  --neutral-foreground: 240 5% 15%;
+  --muted: 240 4.8% 85.9%;
+  --muted-foreground: 240 5% 15%;
+  --accent: 240 4.8% 100%;
+  --accent-foreground: 240 5.9% 10%;
+
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5.9% 90%;
+  --input: 240 0% 55%;
+  --input-foreground: 240 0% 35%;
+  --ring: 240 5.9% 10%;
+
+  --topnav-h: clamp(2.5rem, 5vh, 4.5rem);
+  --player-h: clamp(4rem, 9vh, 7rem);
+  --sidebar-w: clamp(85px, calc(70px + 0.02vw), 100px);
+  --rightpanel-w: clamp(18rem, 22vw, 26rem);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+.glass {
+  background-color: hsl(var(--surface)/ 0.20);
+  backdrop-filter: blur(14px);
+}
+
+.blur-bg {
+  background-color: var(--theme-overlay, hsl(var(--surface-foreground)/.4));
+  backdrop-filter: blur(5px);
+}
+
+.glass-sticky {
+  background-color: var(--theme-overlay, hsl(var(--input-foreground)/.7));
+  backdrop-filter: blur(12px);
+}
+
+.layout-component {
+  background-color: var(--theme-surface, hsl(var(--surface-foreground) / 0.35));
+  border-radius: var(--radius);
+}
+
+
+
+.scroll-area {
+  scrollbar-gutter: stable;
+}
+
+.scroll-area::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-area.is-stuck::-webkit-scrollbar-track {
+  background: hsl(var(--input-foreground) / .7);
+}
+
+.scroll-area::-webkit-scrollbar-thumb {
+  background: hsl(var(--neutral) / 0.5);
+  border-radius: 4px;
+}
+
+.scroll-area::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--neutral));
+}
+
+input[type="text"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--theme-surface, hsl(var(--surface-foreground) / 0.35));
+  outline: none;
+}
+
+input[type="button"] {
+  background-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 2px;
+  height: 5px;
+  background: hsl(var(--muted));
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: hsl(var(--muted));
+  cursor: pointer;
+}
+
+.progress-slider {
+  --track-fill: hsl(var(--muted));
+  --track-bg: hsl(var(--surface) / 0.6);
+  background: transparent;
+}
+
+.progress-slider::-webkit-slider-runnable-track {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--track-fill) var(--progress, 0%), var(--track-bg) var(--progress, 0%));
+}
+
+.progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  margin-top: -3px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: hsl(var(--muted));
+  cursor: pointer;
+}
+
+.progress-slider:hover::-webkit-slider-thumb,
+.progress-slider:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-enter {
+  animation: slide-in-right 0.3s ease-out;
+}
