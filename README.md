@@ -20,6 +20,14 @@ Connect your Last.fm account to enhance each track's metadata:
 
 The app automatically fills in genre tags, HD cover art, and artist info.
 
+### Cookies & age-restricted content
+
+Some YouTube videos require age verification. The app handles these automatically:
+
+- **Auto-detection** — on startup, Buni detects your installed browsers (Chrome, Edge, Firefox, etc.) and uses their YouTube cookies to authenticate. This works as long as you've logged into YouTube in that browser at least once.
+- **Playlists** — if a playlist contains an age-restricted video and cookies are unavailable, that video is skipped and the rest of the playlist is imported. A notification tells you how many were skipped.
+- **Manual override** — you can pick a specific browser in **Settings** > **Cookies browser**, or disable cookies entirely. Use **Detect** to re-scan for browsers at any time.
+
 ### Stay up to date
 
 yt-dlp is updated frequently to stay compatible with sites. From time to time, go to **Settings** > **Update yt-dlp** to get the latest version. If a URL fails to add, it probably needs an update.
@@ -33,14 +41,16 @@ yt-dlp is updated frequently to stay compatible with sites. From time to time, g
 - **Spanish and English interface** — switch languages from Settings
 - **Play queue** — drag to reorder, shuffle, repeat
 - **No ads, no tracking** — just your music
+- **Age-restricted videos** — automatic cookie detection from your browser to access restricted content
 
 ## Coming Soon
 
-- Last.fm scrobbling
-- MP3 support
+- Last.fm scrobbling, lists, profile
+- Searching inside app
+- More audio/video formats support
 - Listening statistics
 - Discovery mode by similar artists
-- Support for more audio sources
+- Mobile support
 
 ## Installation
 
