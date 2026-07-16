@@ -1,52 +1,52 @@
 # Buni Player
 
-Un reproductor de música (proximamente video) simple y rápido. Introduce una URL y escucha al instante, o descarga para escuchar sin conexión. Sin anuncios, sin suscripciones.
+A simple and fast music (and soon video) player. Drop a URL and listen instantly, or download for offline playback. No ads, no subscriptions.
 
-## Primeros pasos
+## Getting Started
 
-### Agregá tu primera canción
+### Add your first song
 
-1. Copiá la URL de una canción de cualquiera de los cientos de sitios soportados
-2. Pegala en la barra de búsqueda de la app y presioná Enter
-3. La app obtiene título, artista, carátula y álbum automáticamente. Dale play.
+1. Copy a song URL from any of the hundreds of supported sites (automatic generated playlists are not supported)
+2. Paste it into the app's search bar and press Enter
+3. The app automatically fetches the title, artist, cover art, and album. Hit play.
 
-### Metadatos enriquecidos (opcional)
+### Rich metadata (optional)
 
-Conectá tu cuenta de Last.fm para mejorar los metadatos de cada track:
+Connect your Last.fm account to enhance each track's metadata:
 
-1. Andá a **Ajustes** > **Last.fm**
-2. Pegá tu [API key gratuita](https://www.last.fm/api)
-3. Probá la conexión y activá el enriquecimiento
+1. Go to **Settings** > **Last.fm**
+2. Paste your [free API key](https://www.last.fm/api)
+3. Test the connection and enable enrichment
 
-La app completa automáticamente tags de género, carátulas HD e info del artista.
+The app automatically fills in genre tags, HD cover art, and artist info.
 
-### Mantenete al día
+### Stay up to date
 
-yt-dlp se actualiza seguido para mantenerse compatible con los sitios. Cada tanto, entrá a **Ajustes** > **Actualizar yt-dlp** para tener la última versión. Si alguna URL falla al agregarse, probablemente necesite una actualización.
+yt-dlp is updated frequently to stay compatible with sites. From time to time, go to **Settings** > **Update yt-dlp** to get the latest version. If a URL fails to add, it probably needs an update.
 
-## Qué hace
+## Features
 
-- **Agregá música desde cualquier plataforma** — soporta cientos de sitios. Pegá una URL y la app obtiene título, artista, álbum y carátula automáticamente
-- **Streaming instantáneo** — escuchá sin descargar
-- **Descarga offline** — bajá tus tracks en un clic, escuchalos sin conexión
-- **Enriquecimiento con Last.fm** — metadatos mejorados, tags de género, carátulas HD, info del artista
-- **Interfaz en español e inglés** — cambia de idioma desde Ajustes
-- **Cola de reproducción** — arrastrá y reordená, shuffle, repetición
-- **Sin anuncios, sin tracking** — es solo tu música
+- **Add music from any platform** — supports hundreds of sites. Paste a URL and the app automatically fetches title, artist, album, and cover art
+- **Instant streaming** — listen without downloading
+- **Offline download** — download your tracks in one click, listen offline
+- **Last.fm enrichment** — improved metadata, genre tags, HD cover art, artist info
+- **Spanish and English interface** — switch languages from Settings
+- **Play queue** — drag to reorder, shuffle, repeat
+- **No ads, no tracking** — just your music
 
-## Próximamente
+## Coming Soon
 
-- Scrobbling a Last.fm
-- Soporte mp3
-- Estadísticas de escucha
-- Modo descubrimiento por artistas similares
-- Soporte para más fuentes de audio
+- Last.fm scrobbling
+- MP3 support
+- Listening statistics
+- Discovery mode by similar artists
+- Support for more audio sources
 
-## Instalación
+## Installation
 
 ### Windows
 
-Copia y pega esto en el Terminal:
+Paste this in your terminal:
 
 ```powershell
 $url = "https://github.com/murakami-aic/buni.player/releases/latest/download/buni-x86_64-pc-windows-msvc.zip"
@@ -56,7 +56,7 @@ Expand-Archive -Force "$env:TEMP\buni.zip" -DestinationPath $dir
 Start-Process "$dir\buni.player.exe"
 ```
 
-Después de la primera vez, ejecuta `$env:LOCALAPPDATA\buni\buni.player.exe` para abrir la app.
+After the first time, run `$env:LOCALAPPDATA\buni\buni.player.exe` to open the app.
 
 ### macOS
 
@@ -80,21 +80,21 @@ open /Applications/buni.player.app
 
 ### Linux
 
-AppImage (recomendado):
+AppImage (recommended):
 
 ```bash
 curl -Lo buni "https://github.com/murakami-aic/buni.player/releases/latest/download/buni-x86_64-unknown-linux-gnu.AppImage"
 chmod +x buni && ./buni
 ```
 
-O con deb:
+Or with deb:
 
 ```bash
 curl -LO "https://github.com/murakami-aic/buni.player/releases/latest/download/buni-x86_64-unknown-linux-gnu.deb"
 sudo dpkg -i buni-x86_64-unknown-linux-gnu.deb
 ```
 
-## Desarrollo
+## Development
 
 ```bash
 git clone https://github.com/murakami-aic/buni.player.git
@@ -103,4 +103,4 @@ npm install
 npm run tauri dev
 ```
 
-Requiere [yt-dlp](https://github.com/yt-dlp/yt-dlp) como sidecar. Ejecutá `bash scripts/download-ytdlp.sh` para descargar los binarios de cada plataforma.
+Requires [yt-dlp](https://github.com/yt-dlp/yt-dlp) as a sidecar. Run `bash scripts/download-ytdlp.sh` to download the platform-specific binaries.
