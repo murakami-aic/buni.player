@@ -2,14 +2,8 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, ExternalLink, Check, X, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { invokeGetYtdlpVersion, invokeUpdateYtdlp, invokeGetDefaultDownloadFolder } from "../../services/tauri";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invokeGetDefaultDownloadFolder } from "../../services/tauri";
 import { open } from "@tauri-apps/plugin-dialog";
-
-interface YtdlpUpdateStatus {
-  status: "checking" | "downloading" | "installing" | "complete" | "error";
-  message: string;
-}
 
 export function Settings() {
   const { t } = useTranslation();
@@ -24,14 +18,10 @@ export function Settings() {
   const [testStatus, setTestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState("");
 
-  const [ytdlpVersion, setYtdlpVersion] = useState<string | null>(null);
-  const [ytdlpStatus, setYtdlpStatus] = useState<YtdlpUpdateStatus | null>(null);
-  const [isUpdating, setIsUpdating] = useState(false);
   const [folderDisplay, setFolderDisplay] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    const unlisteners: UnlistenFn[] = [];
 
     if (!downloadFolder || downloadFolder.startsWith("$")) {
       invokeGetDefaultDownloadFolder()
@@ -41,37 +31,10 @@ export function Settings() {
       setFolderDisplay(downloadFolder);
     }
 
-    listen<YtdlpUpdateStatus>("ytdlp:update-status", (e) => {
-      if (mounted) {
-        setYtdlpStatus(e.payload);
-        if (e.payload.status === "complete" || e.payload.status === "error") {
-          setIsUpdating(false);
-        }
-      }
-    }).then((fn) => unlisteners.push(fn));
-
-    invokeGetYtdlpVersion()
-      .then((v) => { if (mounted) setYtdlpVersion(v); })
-      .catch(() => { });
-
     return () => {
       mounted = false;
-      unlisteners.forEach((fn) => fn());
     };
   }, [downloadFolder]);
-
-  const handleUpdateYtdlp = async () => {
-    setIsUpdating(true);
-    setYtdlpStatus(null);
-    try {
-      const result = await invokeUpdateYtdlp();
-      const newVersion = result.match(/[\d]+\.[\d]+\.[\d]+/)?.[0] ?? result;
-      setYtdlpVersion(newVersion);
-    } catch (e) {
-      setYtdlpStatus({ status: "error", message: String(e) });
-      setIsUpdating(false);
-    }
-  };
 
   const handlePickFolder = async () => {
     const selected = await open({ directory: true, multiple: false });
@@ -228,40 +191,6 @@ export function Settings() {
             </div>
           </div>
         </div>
-
-        <div className="space-y-6">
-          <h2 className="text-lg font-semibold text-foreground">{t("settings.ytdlp")}</h2>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-neutral">
-                {ytdlpVersion ? `v${ytdlpVersion}` : "..."}
-              </span>
-              <button
-                type="button"
-                onClick={handleUpdateYtdlp}
-                disabled={isUpdating}
-                className="px-3 py-1 text-xs rounded bg-accent-list hover:bg-accent text-foreground transition disabled:opacity-50"
-              >
-                {isUpdating && <Loader2 size={12} className="inline animate-spin mr-1" />}
-                {t("settings.update")}
-              </button>
-            </div>
-            {ytdlpStatus && (
-              <div className="flex items-center gap-1.5">
-                {(ytdlpStatus.status === "checking" || ytdlpStatus.status === "downloading" || ytdlpStatus.status === "installing") && (
-                  <Loader2 size={12} className="animate-spin text-neutral" />
-                )}
-                {ytdlpStatus.status === "complete" && <Check size={12} className="text-green-500" />}
-                {ytdlpStatus.status === "error" && <X size={12} className="text-red-400" />}
-                <span className={`text-xs ${ytdlpStatus.status === "error" ? "text-red-400" : ytdlpStatus.status === "complete" ? "text-green-500" : "text-neutral"}`}>
-                  {ytdlpStatus.message}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
 
       </div>
     </div>

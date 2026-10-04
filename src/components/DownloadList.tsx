@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLibraryStore } from "../stores/libraryStore";
 
@@ -9,23 +9,9 @@ function DownloadListItem({ trackId }: { trackId: number }) {
     state.tracks.find((t) => t.id === trackId),
   );
   const downloadTrack = useLibraryStore((state) => state.downloadTrack);
+  const cancelDownload = useLibraryStore((state) => state.cancelDownload);
 
   const d = downloads.get(trackId);
-  const [percent, setPercent] = useState(0);
-
-  useEffect(() => {
-    if (!d || d.status !== "downloading") return;
-    setPercent(0);
-    const id = setInterval(() => {
-      setPercent((p) => {
-        const increment =
-          p < 60 ? 3 + Math.random() * 8 : 0.15 + Math.random() * 0.5;
-        const next = Math.min(p + increment, 95);
-        return next;
-      });
-    }, 500);
-    return () => clearInterval(id);
-  }, [d?.status]);
 
   if (!d) return null;
 
@@ -43,12 +29,21 @@ function DownloadListItem({ trackId }: { trackId: number }) {
             <div className="h-1.5 flex-1 rounded-full bg-neutral/30 overflow-hidden">
               <div
                 className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${Math.min(percent, 100)}%` }}
+                style={{ width: `${Math.min(d.percent, 100)}%` }}
               />
             </div>
             <span className="text-[10px] text-neutral tabular-nums w-8 text-right">
-              {Math.round(percent)}%
+              {Math.round(d.percent)}%
             </span>
+            <button
+              type="button"
+              onClick={() => cancelDownload(trackId)}
+              aria-label={t("downloads.cancel")}
+              title={t("downloads.cancel")}
+              className="grid place-items-center h-5 w-5 rounded hover:bg-accent-list cursor-pointer"
+            >
+              <X size={12} />
+            </button>
           </div>
 
         </div>

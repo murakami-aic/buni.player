@@ -14,7 +14,7 @@ export function Player() {
   const currentTrack = usePlayerStore((state) => state.currentTrack);
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const currentTime = usePlayerStore((state) => state.currentTime);
-  const duration = usePlayerStore((state) => state.duration);
+  const duration = usePlayerStore((state) => state.currentTrack?.duration ?? 0);
   const volume = usePlayerStore((state) => state.volume);
   const pause = usePlayerStore((state) => state.pause);
   const resume = usePlayerStore((state) => state.resume);

@@ -3,12 +3,18 @@ import type { Track } from "../types/track";
 import type { Playlist } from "../types/playlist";
 import type { LastfmSearchResult } from "../types/lastfm";
 
+import type { SearchResult } from "../types/search";
+
 export async function invokeAddTrack(sourceUrl: string): Promise<Track[]> {
   return invoke<Track[]>("add_track", { sourceUrl });
 }
 
 export async function invokeCancelAddTrack(): Promise<void> {
   return invoke("cancel_add_track");
+}
+
+export async function invokeCancelDownload(trackId: number): Promise<void> {
+  return invoke("cancel_download", { trackId });
 }
 
 export async function invokeGetTracks(
@@ -96,14 +102,26 @@ export async function invokeLastfmSearchTrack(title: string, artist?: string): P
   return invoke<LastfmSearchResult>("lastfm_search_track", { title, artist: artist ?? null });
 }
 
-export async function invokeGetYtdlpVersion(): Promise<string> {
-  return invoke<string>("get_ytdlp_version");
-}
-
-export async function invokeUpdateYtdlp(): Promise<string> {
-  return invoke<string>("update_ytdlp");
+export async function invokeUpdateTrack(
+  trackId: number,
+  title: string,
+  artist?: string,
+  album?: string,
+  duration?: number,
+): Promise<Track> {
+  return invoke<Track>("update_track", {
+    trackId,
+    title,
+    artist: artist ?? null,
+    album: album ?? null,
+    duration: duration ?? null,
+  });
 }
 
 export async function invokeGetDefaultDownloadFolder(): Promise<string> {
   return invoke<string>("get_default_download_folder");
+}
+
+export async function invokeSearch(query: string, limit?: number): Promise<SearchResult[]> {
+  return invoke<SearchResult[]>("search_youtube", { query, limit: limit ?? null });
 }

@@ -4,7 +4,7 @@ import { invokeGetSetting, invokeSetSetting, invokeSetLanguage } from "../servic
 export type Theme = "light" | "dark";
 export type Lang = "es" | "en";
 export type PanelView = "queue" | "downloads" | "details";
-export type MainView = "library" | "settings";
+export type MainView = "library" | "settings" | "search_results";
 
 interface SettingsState {
   mainView: MainView;
@@ -14,7 +14,6 @@ interface SettingsState {
   lastfmApiKey: string;
   lastfmEnabled: boolean;
   maxConcurrentDownloads: number;
-  streamUrlCacheHours: number;
   theme: Theme;
   lang: Lang;
   panelView: PanelView | null;
@@ -37,7 +36,6 @@ const DEFAULTS = {
   lastfmApiKey: "",
   lastfmEnabled: true,
   maxConcurrentDownloads: 3,
-  streamUrlCacheHours: 5,
   theme: "dark" as Theme,
   lang: "es" as Lang,
   panelView: null as PanelView | null,
@@ -53,7 +51,6 @@ function parseValue<K extends keyof typeof DEFAULTS>(key: K, raw: string): (type
     case "lastfmEnabled":
       return (raw === "true") as unknown as (typeof DEFAULTS)[K];
     case "maxConcurrentDownloads":
-    case "streamUrlCacheHours":
       return (Number(raw) || DEFAULTS[key]) as unknown as (typeof DEFAULTS)[K];
     case "volume":
       return (isNaN(Number(raw)) ? DEFAULTS[key] : Number(raw)) as unknown as (typeof DEFAULTS)[K];

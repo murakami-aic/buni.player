@@ -13,6 +13,7 @@ pub struct EnrichedData {
     pub genre_tags: Option<Vec<String>>,
     pub lastfm_url: Option<String>,
     pub lastfm_id: Option<String>,
+    pub duration: Option<i64>,
 }
 
 fn db_path(app: &AppHandle) -> Result<PathBuf> {
@@ -137,7 +138,11 @@ pub fn get_tracks(
         Some("album") => "album",
         _ => "created_at",
     };
-    let order = if sort_order.as_deref() == Some("asc") { "ASC" } else { "DESC" };
+    let order = if sort_order.as_deref() == Some("asc") {
+        "ASC"
+    } else {
+        "DESC"
+    };
     sql.push_str(&format!(" ORDER BY {} {}", sort_col, order));
 
     let mut stmt = conn.prepare(&sql)?;
@@ -148,10 +153,7 @@ pub fn get_tracks(
 
 pub fn insert_track(app: &AppHandle, track: &Track) -> Result<i64> {
     let conn = connect(app)?;
-    let genre_tags = track
-        .genre_tags
-        .as_ref()
-        .map(|tags| tags.join(","));
+    let genre_tags = track.genre_tags.as_ref().map(|tags| tags.join(","));
 
     conn.execute(
         "INSERT INTO tracks (
@@ -223,14 +225,18 @@ macro_rules! update_track_field {
 }
 
 pub fn update_track_file(app: &AppHandle, id: i64, file_path: &str) -> Result<()> {
-    update_track_field!(app, id,
+    update_track_field!(
+        app,
+        id,
         "UPDATE tracks SET file_path = ?, mode = 'local', updated_at = ? WHERE id = ?",
         file_path
     )
 }
 
 pub fn update_track_thumbnail(app: &AppHandle, id: i64, thumbnail: &str) -> Result<()> {
-    update_track_field!(app, id,
+    update_track_field!(
+        app,
+        id,
         "UPDATE tracks SET thumbnail = ?, updated_at = ? WHERE id = ?",
         thumbnail
     )
@@ -287,12 +293,29 @@ pub fn set_lastfm_cache(app: &AppHandle, query_key: &str, response: &str) -> Res
     Ok(())
 }
 
+pub fn update_track_metadata(
+    app: &AppHandle,
+    id: i64,
+    title: &str,
+    artist: Option<&str>,
+    album: Option<&str>,
+    duration: Option<i64>,
+) -> Result<()> {
+    let conn = connect(app)?;
+    let now = chrono::Utc::now().timestamp();
+    conn.execute(
+        "UPDATE tracks SET title = ?, artist = ?, album = ?, duration = ?, updated_at = ? WHERE id = ?",
+        params![title, artist, album, duration, now, id],
+    )?;
+    Ok(())
+}
+
 pub fn enrich_track(app: &AppHandle, id: i64, data: &EnrichedData) -> Result<()> {
     let conn = connect(app)?;
     let now = chrono::Utc::now().timestamp();
     let genre_tags = data.genre_tags.as_ref().map(|tags| tags.join(","));
     conn.execute(
-        "UPDATE tracks SET title = ?, artist = ?, album = ?, album_artist = ?, genre_tags = ?, lastfm_url = ?, lastfm_id = ?, updated_at = ? WHERE id = ?",
+        "UPDATE tracks SET title = ?, artist = ?, album = ?, album_artist = ?, genre_tags = ?, lastfm_url = ?, lastfm_id = ?, duration = ?, updated_at = ? WHERE id = ?",
         params![
             data.title,
             data.artist,
@@ -301,6 +324,7 @@ pub fn enrich_track(app: &AppHandle, id: i64, data: &EnrichedData) -> Result<()>
             genre_tags,
             data.lastfm_url,
             data.lastfm_id,
+            data.duration,
             now,
             id,
         ],
@@ -351,7 +375,12 @@ pub fn create_playlist(app: &AppHandle, name: &str, image: Option<&str>) -> Resu
     })
 }
 
-pub fn update_playlist(app: &AppHandle, playlist_id: i64, name: Option<&str>, image: Option<&str>) -> Result<Playlist> {
+pub fn update_playlist(
+    app: &AppHandle,
+    playlist_id: i64,
+    name: Option<&str>,
+    image: Option<&str>,
+) -> Result<Playlist> {
     let conn = connect(app)?;
     let now = chrono::Utc::now().timestamp();
 

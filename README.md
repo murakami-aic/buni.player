@@ -1,14 +1,14 @@
 # Buni Player
 
-A simple and fast music (and soon video) player. Drop a URL and listen instantly, or download for offline playback. No ads, no subscriptions.
+A simple and fast music player. Search YouTube, add a track, stream it, or download it for offline playback. No ads, no subscriptions.
 
 ## Getting Started
 
 ### Add your first song
 
-1. Copy a song URL from any of the hundreds of supported sites (automatic generated playlists are not supported)
-2. Paste it into the app's search bar and press Enter
-3. The app automatically fetches the title, artist, cover art, and album. Hit play.
+1. Enter a song title or paste a YouTube URL in the search bar
+2. Choose a result and add it to your library
+3. The app fetches the title, artist, duration, and cover art. Hit play.
 
 ### Rich metadata (optional)
 
@@ -22,11 +22,11 @@ The app automatically fills in genre tags, HD cover art, and artist info.
 
 ### Stay up to date
 
-yt-dlp is updated frequently to stay compatible with sites. From time to time, go to **Settings** > **Update yt-dlp** to get the latest version. If a URL fails to add, it probably needs an update.
+YouTube playback is resolved by the app's Rust backend; no external downloader or JavaScript runtime is needed.
 
 ## Features
 
-- **Add music from any platform** — supports hundreds of sites. Paste a URL and the app automatically fetches title, artist, album, and cover art
+- **YouTube search and library** — search for a song or paste a YouTube URL; metadata is fetched automatically
 - **Instant streaming** — listen without downloading
 - **Offline download** — download your tracks in one click, listen offline
 - **Last.fm enrichment** — improved metadata, genre tags, HD cover art, artist info
@@ -103,4 +103,4 @@ npm install
 npm run tauri dev
 ```
 
-Requires [yt-dlp](https://github.com/yt-dlp/yt-dlp) as a sidecar. Run `bash scripts/download-ytdlp.sh` to download the platform-specific binaries.
+Requires Node.js and Rust for development. The audio backend is built into the app; no sidecar binaries are required.

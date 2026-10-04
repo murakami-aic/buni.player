@@ -1,6 +1,6 @@
 import { useState, memo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, ChevronRight, Download, HardDrive, MoreHorizontal, Pause, Play, Plus, X, Cloud } from "lucide-react";
+import { AlertTriangle, ChevronRight, Download, HardDrive, MoreHorizontal, Pause, Pencil, Play, Plus, X, Cloud } from "lucide-react";
 import type { Track } from "../../types/track";
 import { useLibraryStore } from "../../stores/libraryStore";
 import { usePlayerStore } from "../../stores/playerStore";
@@ -15,9 +15,10 @@ export interface TrackRowProps {
   index: number;
   isCurrent: boolean;
   isPlaying: boolean;
+  onEdit?: (track: Track) => void;
 }
 
-export const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlaying }: TrackRowProps) {
+export const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlaying, onEdit }: TrackRowProps) {
   const { t } = useTranslation();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const { filtered } = useFilteredTracks();
@@ -51,6 +52,13 @@ export const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlay
   }, [track, index, filtered, setQueue, setQueuePlaylistId, currentPlaylistId, currentTrack, isPlaying, pause, resume, isViewingPlaying]);
 
   const menuItems: DropdownItem[] = [];
+  if (!track.pending) {
+    menuItems.push({
+      label: t("track.edit_info"),
+      icon: <Pencil size={14} />,
+      onClick: () => onEdit?.(track),
+    });
+  }
   if (track.mode === "streaming" && !track.pending) {
     menuItems.push({
       label: t("track.download"),
@@ -104,7 +112,7 @@ export const TrackRow = memo(function TrackRow({ track, index, isCurrent, isPlay
   return (
     <div
       className={`text-neutral py-2 mx-2 group grid rounded-md grid-cols-[auto_2fr_2fr_auto_auto_auto] @[600px]:grid-cols-[auto_2fr_2fr_2fr_auto_auto_auto] @[900px]:grid-cols-[auto_1fr_1fr_1fr_auto_auto_auto_auto] transition hover:bg-accent-list ${dropdownOpen ? "bg-accent-list" : ""}`}>
-      <span className="flex text-sm  font-medium tabular-nums w-6 items-center justify-center">
+      <span className="flex text-sm  font-medium tabular-nums w-8 items-center justify-center">
         {index + 1}
       </span>
 

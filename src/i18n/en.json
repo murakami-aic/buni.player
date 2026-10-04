@@ -38,6 +38,9 @@
   "track.delete": "Delete",
   "track.downloading": "Downloading",
   "track.error": "Error",
+  "track.edit_info": "Edit info",
+  "track.edit_save": "Save",
+  "track.edit_cancel": "Cancel",
   "player.library": "Library",
   "player.no_track": "No track",
   "player.repeat_one": "Repeat one",
@@ -80,8 +83,6 @@
   "settings.downloads": "Downloads",
   "settings.download_folder": "Download folder",
   "settings.change": "Change",
-  "settings.ytdlp": "yt-dlp",
-  "settings.update": "Update",
   "settings.language": "Language",
   "settings.spanish": "Spanish",
   "settings.english": "English",
@@ -94,5 +95,7 @@
   "settings.enter_api_key": "Enter an API key first.",
   "settings.connection_success": "Connection successful",
   "settings.connection_error": "Connection error",
-  "settings.unknown_error": "Unknown error"
+  "settings.unknown_error": "Unknown error",
+  "search.no_results": "No results found",
+  "downloads.cancel": "Cancel download"
 }

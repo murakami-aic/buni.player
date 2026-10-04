@@ -1,15 +1,34 @@
 use crate::models::track::Track;
-use crate::services::{database, i18n, lastfm_client, ytdlp};
+use crate::services::innertube::VideoMetadata;
+use crate::services::{database, i18n, innertube, lastfm_client};
 use chrono::Utc;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
+use std::{collections::HashMap, time::Duration};
 use tauri::{AppHandle, Emitter, Manager};
-use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_store::StoreExt;
 
 static CANCEL_FLAG: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
-static CHILD_SLOT: Mutex<Option<CommandChild>> = Mutex::new(None);
+static DOWNLOAD_CANCEL_FLAGS: LazyLock<Mutex<HashMap<i64, Arc<AtomicBool>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+struct DownloadCancellationGuard(i64);
+
+impl Drop for DownloadCancellationGuard {
+    fn drop(&mut self) {
+        if let Ok(mut flags) = DOWNLOAD_CANCEL_FLAGS.lock() {
+            flags.remove(&self.0);
+        }
+    }
+}
+
+async fn wait_until_cancelled(flag: Arc<AtomicBool>) {
+    while !flag.load(Ordering::Relaxed) {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
 
 #[tauri::command]
 pub async fn get_tracks(
@@ -29,7 +48,18 @@ pub async fn add_track(app: AppHandle, source_url: String) -> Result<Vec<Track>,
     *CANCEL_FLAG.lock().unwrap() = Some(cancel_flag.clone());
 
     let no_playlist = source_url.contains("list=RD");
-    let metadata_list = match ytdlp::get_metadata(&app, &source_url, &CHILD_SLOT, no_playlist).await {
+    let use_flat_playlist = app
+        .store("settings.json")
+        .ok()
+        .and_then(|s| s.get("lastfmApiKey"))
+        .and_then(|v| v.as_str().map(|s| !s.is_empty()))
+        .unwrap_or(false);
+    let metadata_result = tokio::select! {
+        _ = wait_until_cancelled(cancel_flag.clone()) => Err("cancelled".to_string()),
+        result = innertube::get_metadata(&source_url, no_playlist, use_flat_playlist) => result,
+    };
+
+    let metadata_list = match metadata_result {
         Ok(list) => list,
         Err(e) => {
             *CANCEL_FLAG.lock().unwrap() = None;
@@ -43,7 +73,7 @@ pub async fn add_track(app: AppHandle, source_url: String) -> Result<Vec<Track>,
     let total = metadata_list.len() as i64;
     if total == 0 {
         *CANCEL_FLAG.lock().unwrap() = None;
-        return Err(i18n::t("error.ytdlp.generic"));
+        return Err(i18n::t("error.innertube.no_results"));
     }
 
     let _ = app.emit("track:add-start", serde_json::json!({ "total": total }));
@@ -98,7 +128,7 @@ pub async fn add_track(app: AppHandle, source_url: String) -> Result<Vec<Track>,
         track.id = id;
 
         if let Some(url) = metadata.thumbnail_url {
-            match ytdlp::download_thumbnail(&app, &url, id).await {
+            match innertube::download_thumbnail(&app, &url, id).await {
                 Ok(path) => {
                     let _ = database::update_track_thumbnail(&app, id, &path);
                     track.thumbnail = Some(path);
@@ -122,13 +152,20 @@ pub async fn add_track(app: AppHandle, source_url: String) -> Result<Vec<Track>,
                         track.album = enriched.album;
                         track.album_artist = enriched.album_artist;
                         track.genre_tags = enriched.genre_tags;
+                        track.duration = track.duration.or(enriched.duration);
                         track.lastfm_url = enriched.lastfm_url;
                         track.lastfm_id = enriched.lastfm_id;
-                        let _ = app.emit("track:enriched", serde_json::json!({ "trackId": id, "disc": false }));
+                        let _ = app.emit(
+                            "track:enriched",
+                            serde_json::json!({ "trackId": id, "disc": false }),
+                        );
                     }
                     Err(e) => {
                         eprintln!("Last.fm enrichment failed for #{}: {e}", id);
-                        let _ = app.emit("track:enrich-error", serde_json::json!({ "trackId": id, "error": e }));
+                        let _ = app.emit(
+                            "track:enrich-error",
+                            serde_json::json!({ "trackId": id, "error": e }),
+                        );
                     }
                 }
             }
@@ -197,6 +234,47 @@ pub async fn delete_local_file(app: AppHandle, track_id: i64) -> Result<(), Stri
 
 #[tauri::command]
 pub async fn download_track(app: AppHandle, track_id: i64) -> Result<(), String> {
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    {
+        let mut flags = DOWNLOAD_CANCEL_FLAGS.lock().map_err(|e| e.to_string())?;
+        if flags.contains_key(&track_id) {
+            return Err("This track is already downloading".to_string());
+        }
+        flags.insert(track_id, cancel_flag.clone());
+    }
+    let _guard = DownloadCancellationGuard(track_id);
+
+    match download_track_inner(&app, track_id, cancel_flag).await {
+        Ok(file_path) => {
+            database::update_track_file(&app, track_id, &file_path).map_err(|e| e.to_string())?;
+            let _ = app.emit(
+                "track:download-complete",
+                serde_json::json!({ "trackId": track_id, "filePath": file_path }),
+            );
+            Ok(())
+        }
+        Err(error) if error == "cancelled" => {
+            let _ = app.emit(
+                "track:download-cancelled",
+                serde_json::json!({ "trackId": track_id }),
+            );
+            Ok(())
+        }
+        Err(error) => {
+            let _ = app.emit(
+                "track:download-error",
+                serde_json::json!({ "trackId": track_id, "error": error }),
+            );
+            Err(error)
+        }
+    }
+}
+
+async fn download_track_inner(
+    app: &AppHandle,
+    track_id: i64,
+    cancel_flag: Arc<AtomicBool>,
+) -> Result<String, String> {
     let track = database::get_tracks(&app, None, None, None, None)
         .map_err(|e| e.to_string())?
         .into_iter()
@@ -206,53 +284,90 @@ pub async fn download_track(app: AppHandle, track_id: i64) -> Result<(), String>
     let download_folder = resolve_download_folder(&app)?;
     std::fs::create_dir_all(&download_folder).map_err(|e| e.to_string())?;
 
-    let template = format!(
-        "{}/%(title).120s.%(ext)s",
-        download_folder.to_string_lossy()
-    );
+    let mut filename = sanitize_filename::sanitize(&track.title);
+    filename = filename.chars().take(120).collect();
+    if filename.trim().is_empty() {
+        filename = format!("track-{}", track.id);
+    }
 
-    let file_path = match ytdlp::download_audio(&app, &track.source_url, &template, track_id).await {
-        Ok(path) => path,
-        Err(e) => {
-            let _ = app.emit("track:download-error", serde_json::json!({ "trackId": track_id, "error": e }));
-            return Err(e);
+    let mut destination = download_folder.join(format!("{filename}.m4a"));
+    let mut suffix = 1;
+    while destination.exists() {
+        destination = download_folder.join(format!("{filename} ({suffix}).m4a"));
+        suffix += 1;
+    }
+
+    let mut resolved = innertube::resolve(&track.source_url).await?;
+    for attempt in 0..3 {
+        match innertube::download(
+            app,
+            &resolved.stream_url,
+            &destination,
+            track_id,
+            resolved.bytes,
+            resolved.user_agent,
+            cancel_flag.clone(),
+        )
+        .await
+        {
+            Ok(_) => break,
+            Err(error) if error.contains("HTTP 403") && attempt < 2 => {
+                resolved =
+                    innertube::resolve_after(&track.source_url, resolved.client_name).await?;
+            }
+            Err(error) => return Err(error),
         }
-    };
-    database::update_track_file(&app, track_id, &file_path).map_err(|e| e.to_string())?;
-    let _ = app.emit(
-        "track:download-complete",
-        serde_json::json!({ "trackId": track_id, "filePath": file_path }),
-    );
-    Ok(())
+    }
+
+    destination
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| "Invalid download path".to_string())
 }
 
 #[tauri::command]
 pub async fn get_stream_url(app: AppHandle, track_id: i64) -> Result<String, String> {
+    get_direct_stream_url(&app, track_id).await?;
+    Ok(format!("buni-audio://localhost/{track_id}"))
+}
+
+pub(crate) async fn get_direct_stream_url(
+    app: &AppHandle,
+    track_id: i64,
+) -> Result<String, String> {
     let track = database::get_tracks(&app, None, None, None, None)
         .map_err(|e| e.to_string())?
         .into_iter()
         .find(|t| t.id == track_id)
         .ok_or_else(|| i18n::t("error.track.not_found"))?;
 
-    let cache_hours: i64 = app
-        .store("settings.json")
-        .ok()
-        .and_then(|s| s.get("streamUrlCacheHours"))
-        .and_then(|v| v.as_str().map(|s| s.to_string()))
-        .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or(5);
-
     let now = Utc::now().timestamp();
     if let (Some(url), Some(ts)) = (&track.stream_url, track.stream_url_ts) {
-        if now - ts < cache_hours * 3600 {
+        if innertube::is_supported_stream_url(url) && innertube::cached_url_is_fresh(url, ts, now) {
             return Ok(url.clone());
         }
     }
 
-    let stream_url = ytdlp::get_stream_url(&app, &track.source_url).await?;
+    let resolved = innertube::resolve(&track.source_url).await?;
+    let stream_url = resolved.stream_url.clone();
     database::update_track_stream_url(&app, track_id, &stream_url).map_err(|e| e.to_string())?;
-    let _ = app.emit("track:stream-resolved", serde_json::json!({ "trackId": track_id, "streamUrl": stream_url }));
     Ok(stream_url)
+}
+
+pub(crate) async fn get_direct_stream_url_after_client(
+    app: &AppHandle,
+    track_id: i64,
+    client_name: &str,
+) -> Result<String, String> {
+    let track = database::get_tracks(app, None, None, None, None)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|track| track.id == track_id)
+        .ok_or_else(|| i18n::t("error.track.not_found"))?;
+    let resolved = innertube::resolve_after(&track.source_url, client_name).await?;
+    database::update_track_stream_url(app, track_id, &resolved.stream_url)
+        .map_err(|e| e.to_string())?;
+    Ok(resolved.stream_url)
 }
 
 #[tauri::command]
@@ -261,12 +376,60 @@ pub async fn invalidate_stream_url(app: AppHandle, track_id: i64) -> Result<(), 
 }
 
 #[tauri::command]
+pub async fn update_track(
+    app: AppHandle,
+    track_id: i64,
+    title: String,
+    artist: Option<String>,
+    album: Option<String>,
+    duration: Option<i64>,
+) -> Result<Track, String> {
+    database::update_track_metadata(
+        &app,
+        track_id,
+        &title,
+        artist.as_deref(),
+        album.as_deref(),
+        duration,
+    )
+    .map_err(|e| e.to_string())?;
+
+    let updated = database::get_tracks(&app, None, None, None, None)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|t| t.id == track_id)
+        .ok_or_else(|| i18n::t("error.track.not_found"))?;
+
+    let _ = app.emit("library:updated", serde_json::json!({}));
+    Ok(updated)
+}
+
+#[tauri::command]
+pub async fn search_youtube(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<VideoMetadata>, String> {
+    let limit = limit.unwrap_or(10);
+    let results = innertube::search(&query, limit).await?;
+    Ok(results)
+}
+
+#[tauri::command]
 pub fn cancel_add_track() -> Result<(), String> {
     if let Some(flag) = CANCEL_FLAG.lock().unwrap().as_ref() {
         flag.store(true, Ordering::SeqCst);
     }
-    if let Some(child) = CHILD_SLOT.lock().unwrap().take() {
-        let _ = child.kill();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_download(track_id: i64) -> Result<(), String> {
+    if let Some(flag) = DOWNLOAD_CANCEL_FLAGS
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&track_id)
+    {
+        flag.store(true, Ordering::SeqCst);
     }
     Ok(())
 }

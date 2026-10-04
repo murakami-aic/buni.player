@@ -4,6 +4,7 @@ import { RightPanel } from "./RightPanel";
 import { Settings } from "../user/Settings";
 import { TopNav } from "./TopNav";
 import { TrackList } from "../track/TrackList";
+import { SearchResults } from "../SearchResults";
 import { ToastContainer } from "../ui/Toast";
 import { useSettingsStore } from "../../stores/settingsStore";
 
@@ -20,7 +21,7 @@ export function Layout() {
       <div className="flex flex-1 gap-2 overflow-hidden ml-2 py-2">
         <PlaylistSidebar />
 
-        {mainView === "settings" ? <Settings /> : <TrackList />}
+        {mainView === "settings" ? <Settings /> : mainView === "search_results" ? <SearchResults /> : <TrackList />}
 
         <aside
           className={`shrink-0 overflow-hidden rounded-md ${panelView ? "w-(--rightpanel-w)" : "w-10 hover:bg-accent-list"}`}>

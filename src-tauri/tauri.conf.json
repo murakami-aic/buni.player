@@ -38,9 +38,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": [
-      "binaries/yt-dlp"
-    ],
     "shortDescription": "Buni Player - Reproductor de musica offline y streaming",
     "longDescription": "Buni Player es un reproductor de musica que permite agregar tracks desde YouTube, descargarlos para escuchar offline, enriquecer metadatos con Last.fm y gestionar playlists personalizadas.",
     "copyright": "2026 murakami",

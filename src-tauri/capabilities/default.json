@@ -13,18 +13,9 @@
     "core:window:allow-maximize",
     "core:window:allow-unminimize",
     "opener:default",
-    {
-      "identifier": "shell:allow-execute",
-      "allow": [{ "name": "binaries/yt-dlp", "sidecar": true }]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [{ "name": "binaries/yt-dlp", "sidecar": true }]
-    },
     "store:default",
     "deep-link:default",
     "dialog:default",
-    "shell:allow-open",
     {
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "$APPDATA/thumbnails/**" }]

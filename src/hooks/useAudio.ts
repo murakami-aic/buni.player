@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { invokeGetStreamUrl, invokeInvalidateStreamUrl, invokeTrackStarted, invokeDeleteLocalFile } from "../services/tauri";
+import { invokeGetStreamUrl, invokeInvalidateStreamUrl, invokeTrackStarted, invokeDeleteLocalFile, invokeUpdateTrack } from "../services/tauri";
 import { usePlayerStore } from "../stores/playerStore";
 import { useLibraryStore } from "../stores/libraryStore";
 import { useSettingsStore } from "../stores/settingsStore";
@@ -19,7 +19,6 @@ export function useAudio() {
   const isPlaying = usePlayerStore((state) => state.isPlaying);
   const volume = usePlayerStore((state) => state.volume);
   const setCurrentTime = usePlayerStore((state) => state.seek);
-  const setDuration = usePlayerStore((state) => state.setDuration);
   const next = usePlayerStore((state) => state.next);
 
   const isPlayingRef = useRef(isPlaying);
@@ -47,7 +46,26 @@ export function useAudio() {
         if (trackId) invokeTrackStarted(trackId).catch(() => {});
       }
     };
-    const handleDurationChange = () => setDuration(audio.duration || 0);
+    const handleDurationChange = () => {
+      const dur = Math.round(audio.duration || 0);
+      if (dur > 0) {
+        const track = usePlayerStore.getState().currentTrack;
+        if (track && !track.duration) {
+          invokeUpdateTrack(
+            track.id,
+            track.title,
+            track.artist ?? undefined,
+            track.album ?? undefined,
+            dur,
+          )
+            .then((updated) => {
+              useLibraryStore.getState().applyTrackUpdated(updated);
+              usePlayerStore.setState({ currentTrack: updated });
+            })
+            .catch(() => {});
+        }
+      }
+    };
     const handleEnded = () => {
       if (!hasStartedRef.current) {
         hasStartedRef.current = true;
@@ -130,7 +148,7 @@ export function useAudio() {
       audio.pause();
       audioRef.current = null;
     };
-  }, [setCurrentTime, setDuration, next]);
+  }, [setCurrentTime, next]);
 
   useEffect(() => {
     if (!audioRef.current) return;

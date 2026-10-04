@@ -32,7 +32,6 @@ interface PlayerState {
   currentTrack: Track | null;
   isPlaying: boolean;
   currentTime: number;
-  duration: number;
   volume: number;
   queue: Track[];
   queueIndex: number;
@@ -45,7 +44,6 @@ interface PlayerState {
   pause: () => void;
   resume: () => void;
   seek: (time: number) => void;
-  setDuration: (duration: number) => void;
   setVolume: (volume: number) => void;
   next: () => void;
   previous: () => void;
@@ -69,7 +67,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTrack: null,
   isPlaying: false,
   currentTime: 0,
-  duration: 0,
   volume: 1,
   queue: [],
   queueIndex: 0,
@@ -95,7 +92,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   resume: () => set({ isPlaying: true }),
 
   seek: (time) => set({ currentTime: time }),
-  setDuration: (duration) => set({ duration }),
   setVolume: (volume) => set({ volume: Math.max(0, Math.min(1, volume)) }),
 
   next: () => {

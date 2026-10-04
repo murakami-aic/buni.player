@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Track, TrackMode } from "../types/track";
 import type { DownloadProgress } from "../types/download";
+import type { SearchResult } from "../types/search";
 import {
   invokeAddTrack,
   invokeDeleteTrack,
@@ -10,6 +11,7 @@ import {
   invokeGetSetting,
   invokeSetSetting,
   invokeCancelAddTrack,
+  invokeCancelDownload,
 } from "../services/tauri";
 import { useToastStore } from "./toastStore";
 import { errorMessage } from "../utils/error";
@@ -29,10 +31,13 @@ interface LibraryState {
   downloads: Map<number, DownloadProgress>;
   adding: boolean;
   addProgress: { current: number; total: number } | null;
+  searchResults: SearchResult[];
+  searchResultsLoading: boolean;
 
   fetchTracks: () => Promise<void>;
   addTrack: (url: string) => Promise<void>;
   downloadTrack: (id: number) => Promise<void>;
+  cancelDownload: (id: number) => Promise<void>;
   deleteTrack: (id: number) => Promise<void>;
   deleteLocalFile: (id: number) => Promise<void>;
   setFilter: (mode: FilterMode) => void;
@@ -41,12 +46,17 @@ interface LibraryState {
   setDownloadProgress: (progress: DownloadProgress) => void;
   applyDownloadComplete: (trackId: number, filePath: string) => void;
   applyDownloadError: (trackId: number, error: string) => void;
+  applyDownloadCancelled: (trackId: number) => void;
   applyTrackRemoved: (trackId: number) => void;
+  applyTrackUpdated: (updated: Track) => void;
   applyTrackPlayed: (trackId: number) => void;
   markAsStreaming: (trackId: number) => void;
   loadLibraryUI: () => Promise<void>;
   cancelAddTrack: () => void;
   setAddProgress: (progress: { current: number; total: number } | null) => void;
+  setSearchResults: (results: SearchResult[]) => void;
+  clearSearchResults: () => void;
+  setSearchResultsLoading: (loading: boolean) => void;
 }
 
 export const useLibraryStore = create<LibraryState>((set) => ({
@@ -60,6 +70,8 @@ export const useLibraryStore = create<LibraryState>((set) => ({
   downloads: new Map(),
   adding: false,
   addProgress: null,
+  searchResults: [],
+  searchResultsLoading: false,
 
   fetchTracks: async () => {
     set({ loading: true, error: null });
@@ -158,6 +170,15 @@ export const useLibraryStore = create<LibraryState>((set) => ({
     }
   },
 
+  cancelDownload: async (id: number) => {
+    try {
+      await invokeCancelDownload(id);
+    } catch (err) {
+      const msg = errorMessage(err, "Unknown error");
+      useToastStore.getState().addToast("error", msg);
+    }
+  },
+
   deleteTrack: async (id: number) => {
     try {
       await invokeDeleteTrack(id);
@@ -220,9 +241,25 @@ export const useLibraryStore = create<LibraryState>((set) => ({
     });
   },
 
+  applyDownloadCancelled: (trackId: number) => {
+    set((state) => {
+      const downloads = new Map(state.downloads);
+      downloads.delete(trackId);
+      return { downloads };
+    });
+  },
+
   applyTrackRemoved: (trackId: number) => {
     set((state) => ({
       tracks: state.tracks.filter((t) => t.id !== trackId),
+    }));
+  },
+
+  applyTrackUpdated: (updated: Track) => {
+    set((state) => ({
+      tracks: state.tracks.map((t) =>
+        t.id === updated.id ? { ...updated, pending: t.pending } : t,
+      ),
     }));
   },
 
@@ -266,6 +303,12 @@ export const useLibraryStore = create<LibraryState>((set) => ({
   },
 
   setAddProgress: (progress) => set({ addProgress: progress }),
+
+  setSearchResults: (results) => set({ searchResults: results }),
+
+  clearSearchResults: () => set({ searchResults: [], searchResultsLoading: false }),
+
+  setSearchResultsLoading: (loading) => set({ searchResultsLoading: loading }),
 }));
 
 interface LibraryUISnapshot {

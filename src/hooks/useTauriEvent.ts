@@ -11,6 +11,7 @@ export function useTauriEvent() {
   const setDownloadProgress = useLibraryStore((state) => state.setDownloadProgress);
   const applyDownloadComplete = useLibraryStore((state) => state.applyDownloadComplete);
   const applyDownloadError = useLibraryStore((state) => state.applyDownloadError);
+  const applyDownloadCancelled = useLibraryStore((state) => state.applyDownloadCancelled);
   const applyTrackRemoved = useLibraryStore((state) => state.applyTrackRemoved);
   const applyTrackPlayed = useLibraryStore((state) => state.applyTrackPlayed);
 
@@ -53,6 +54,14 @@ export function useTauriEvent() {
       applyDownloadError(payload.trackId, payload.error);
     });
 
+    safeListen<{ trackId: number; error: string }>("track:stream-proxy-error", ({ error }) => {
+      useToastStore.getState().addToast("error", error);
+    });
+
+    safeListen<{ trackId: number }>("track:download-cancelled", ({ trackId }) => {
+      applyDownloadCancelled(trackId);
+    });
+
     safeListen<{ trackId: number }>("track:deleted", (payload) => {
       applyTrackRemoved(payload.trackId);
       usePlaylistStore.getState().removeTrackLocally(payload.trackId);
@@ -75,10 +84,6 @@ export function useTauriEvent() {
       usePlaylistStore.getState().fetchPlaylists();
     });
 
-    safeListen<{ trackId: number; streamUrl: string }>("track:stream-resolved", () => {
-      // stream URL is cached per-track in useAudio via invoke; no UI update needed
-    });
-
     safeListen<{ trackId: number; error: string }>("track:enrich-error", (payload) => {
       useToastStore.getState().addToast("error", payload.error);
     });
@@ -87,5 +92,5 @@ export function useTauriEvent() {
       mounted = false;
       unlisteners.forEach((fn) => fn());
     };
-  }, [addTrack, fetchTracks, setDownloadProgress, applyDownloadComplete, applyDownloadError, applyTrackRemoved, applyTrackPlayed]);
+  }, [addTrack, fetchTracks, setDownloadProgress, applyDownloadComplete, applyDownloadError, applyDownloadCancelled, applyTrackRemoved, applyTrackPlayed]);
 }

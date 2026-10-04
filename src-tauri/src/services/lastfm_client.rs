@@ -17,29 +17,23 @@ static LAST_API_CALL: AtomicI64 = AtomicI64::new(0);
 
 fn re_parens() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)\s*\((?:feat\.?|ft\.?|featuring)\s+[^)]+\)").unwrap()
-    })
+    RE.get_or_init(|| Regex::new(r"\s*\([^)]*\)").unwrap())
 }
 
 fn re_brackets() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)\s*\[(?:official\s+)?(?:video|hd|1080p|4k|hq|official|slowed(?:\s*\+\s*reverb)?|reverb|speed(?:ed)?(?:\s*(?:up))?|visuali[sz]er|sped\s*up|nightcore|remastered?)\]").unwrap()
-    })
+    RE.get_or_init(|| Regex::new(r"\s*\[[^\]]*\]").unwrap())
 }
 
 fn re_feat() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)\s+(?:feat\.?|ft\.?|featuring)\s+[^()\[\]]+$").unwrap()
-    })
+    RE.get_or_init(|| Regex::new(r"(?i)\s+(?:feat\.?|ft\.?|featuring)\s+[^()\[\]]+$").unwrap())
 }
 
-fn re_noise_parens() -> &'static Regex {
+fn re_version_noise() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)\s*\((?:official\s+)?(?:video|music\s+video|audio|lyrics?|lyric\s+video|live(?:\s+at\s+.+?)?|hd|1080p|4k|hq|remastered|\d{4}\s*(?:remaster|version)|album\s+version|single\s+version|radio\s+edit|visuali[sz]er|mv|official|performance\s+video|dance\s+video|explicit|slowed(?:\s*\+\s*reverb)?|reverb|speed(?:ed)?(?:\s*(?:up))?|sped\s*up|nightcore)\)").unwrap()
+        Regex::new(r"(?i)\s+(?:slowed(?:\s*\+\s*reverb)?|reverb|sped\s*up|speed(?:ed)?\s*up|nightcore|remastered?)$").unwrap()
     })
 }
 
@@ -63,17 +57,12 @@ fn re_artist_official() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"(?i)\s*official\s*$").unwrap())
 }
 
-fn re_title_split() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\s*-\s+").unwrap())
-}
-
 fn cleanup_title(raw: &str) -> String {
     let mut t = raw.to_string();
-    t = re_parens().replace(&t, "").to_string();
-    t = re_feat().replace(&t, "").to_string();
-    t = re_noise_parens().replace_all(&t, "").to_string();
     t = re_brackets().replace_all(&t, "").to_string();
+    t = re_parens().replace_all(&t, "").to_string();
+    t = re_feat().replace(&t, "").to_string();
+    t = re_version_noise().replace(&t, "").to_string();
     t = re_spaces().replace_all(&t, " ").trim().to_string();
     t
 }
@@ -126,7 +115,11 @@ fn api_key(app: &AppHandle) -> Result<String, String> {
         .ok_or_else(|| i18n::t("error.lastfm.no_api_key"))
 }
 
-async fn call_api(app: &AppHandle, method: &str, params: &[(&str, &str)]) -> Result<String, String> {
+async fn call_api(
+    app: &AppHandle,
+    method: &str,
+    params: &[(&str, &str)],
+) -> Result<String, String> {
     let key = api_key(app)?;
 
     let cache_key_parts: Vec<String> = std::iter::once(method.to_string())
@@ -141,7 +134,7 @@ async fn call_api(app: &AppHandle, method: &str, params: &[(&str, &str)]) -> Res
     rate_limit().await;
 
     let url = format!(
-        "https://ws.audioscrobbler.com/2.0/?method={}&api_key={}&format=json",
+        "https://ws.audioscrobbler.com/2.0/?method={}&api_key={}&format=json&autocorrect=1",
         method, key
     );
     let url = params.iter().fold(url, |acc, (k, v)| {
@@ -157,23 +150,16 @@ async fn call_api(app: &AppHandle, method: &str, params: &[(&str, &str)]) -> Res
             format!("Last.fm: client error: {e}")
         })?;
 
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| {
-            eprintln!("[lastfm] request failed: {e} | url={url_display}");
-            format!("Last.fm: request error: {e}")
-        })?;
+    let response = client.get(&url).send().await.map_err(|e| {
+        eprintln!("[lastfm] request failed: {e} | url={url_display}");
+        format!("Last.fm: request error: {e}")
+    })?;
 
     let status = response.status();
-    let text = response
-        .text()
-        .await
-        .map_err(|e| {
-            eprintln!("[lastfm] read body failed: {e}");
-            format!("Last.fm: read error: {e}")
-        })?;
+    let text = response.text().await.map_err(|e| {
+        eprintln!("[lastfm] read body failed: {e}");
+        format!("Last.fm: read error: {e}")
+    })?;
 
     if !status.is_success() {
         eprintln!("[lastfm] HTTP {status}: {text}");
@@ -241,65 +227,23 @@ async fn search_track_robust(
         eprintln!("[lastfm] search stripped: \"{search_title}\" (was \"{clean_title}\")");
     }
 
-    // Attempt 1: search title + clean artist
     if !clean_title.is_empty() && !clean_artist.is_empty() {
         match search_track(app, &search_title, &clean_artist).await {
             Ok(Some(result)) => {
-                eprintln!("[lastfm] attempt 1 OK: \"{}\" by \"{}\"", result.name, result.artist);
+                eprintln!(
+                    "[lastfm] attempt OK: \"{}\" by \"{}\"",
+                    result.name, result.artist
+                );
                 return Some(result);
             }
-            Ok(None) => eprintln!("[lastfm] attempt 1: no match for \"{search_title}\" + \"{clean_artist}\""),
-            Err(e) => eprintln!("[lastfm] attempt 1 ERROR: {e}"),
+            Ok(None) => eprintln!("[lastfm] no match for \"{search_title}\" + \"{clean_artist}\""),
+            Err(e) => eprintln!("[lastfm] search ERROR: {e}"),
         }
     } else {
-        eprintln!("[lastfm] attempt 1 SKIP: empty title or artist");
+        eprintln!("[lastfm] SKIP: empty title or artist");
     }
 
-    // Attempt 2: search title only (drop potentially wrong artist)
-    if !clean_title.is_empty() {
-        match search_track(app, &search_title, "").await {
-            Ok(Some(result)) => {
-                eprintln!("[lastfm] attempt 2 OK: \"{}\" by \"{}\"", result.name, result.artist);
-                return Some(result);
-            }
-            Ok(None) => eprintln!("[lastfm] attempt 2: no match for \"{search_title}\" (no artist)"),
-            Err(e) => eprintln!("[lastfm] attempt 2 ERROR: {e}"),
-        }
-    }
-
-    // Attempt 3: try "Artist - Title" split on raw title
-    let parts: Vec<&str> = re_title_split().splitn(raw_title, 2).collect();
-    if parts.len() == 2 {
-        let extracted_artist = cleanup_artist(parts[0]);
-        let extracted_title_raw = cleanup_title(parts[1]);
-        let extracted_title = strip_artist_prefix(&extracted_title_raw, &extracted_artist);
-        eprintln!("[lastfm] attempt 3 split: artist=\"{extracted_artist}\" title=\"{extracted_title_raw}\"");
-        if extracted_title != extracted_title_raw {
-            eprintln!("[lastfm] attempt 3 stripped: \"{extracted_title}\" (was \"{extracted_title_raw}\")");
-        }
-        if !extracted_title.is_empty() && !extracted_artist.is_empty() {
-            match search_track(app, &extracted_title, &extracted_artist).await {
-                Ok(Some(result)) => {
-                    eprintln!("[lastfm] attempt 3a OK: \"{}\" by \"{}\"", result.name, result.artist);
-                    return Some(result);
-                }
-                Ok(None) => eprintln!("[lastfm] attempt 3a: no match"),
-                Err(e) => eprintln!("[lastfm] attempt 3a ERROR: {e}"),
-            }
-        }
-        if !extracted_title.is_empty() {
-            match search_track(app, &extracted_title, "").await {
-                Ok(Some(result)) => {
-                    eprintln!("[lastfm] attempt 3b OK: \"{}\" by \"{}\"", result.name, result.artist);
-                    return Some(result);
-                }
-                Ok(None) => eprintln!("[lastfm] attempt 3b: no match"),
-                Err(e) => eprintln!("[lastfm] attempt 3b ERROR: {e}"),
-            }
-        }
-    }
-
-    eprintln!("[lastfm] search_track_robust: all attempts failed");
+    eprintln!("[lastfm] search_track_robust: failed");
     None
 }
 
@@ -372,12 +316,18 @@ pub async fn enrich_metadata(
     artist: &str,
 ) -> Result<EnrichedData, String> {
     let _ = api_key(app)?;
-    eprintln!("[lastfm] enrich_metadata: track_id={track_id} title=\"{title}\" artist=\"{artist}\"");
+    eprintln!(
+        "[lastfm] enrich_metadata: track_id={track_id} title=\"{title}\" artist=\"{artist}\""
+    );
 
-    let search = search_track_robust(app, title, artist).await
+    let search = search_track_robust(app, title, artist)
+        .await
         .ok_or_else(|| i18n::t("error.lastfm.not_found"))?;
 
-    eprintln!("[lastfm] search result: \"{}\" by \"{}\"", search.name, search.artist);
+    eprintln!(
+        "[lastfm] search result: \"{}\" by \"{}\"",
+        search.name, search.artist
+    );
 
     let track_info = get_track_info(app, &search.artist, &search.name, None).await?;
     let track_data = match &track_info {
@@ -388,10 +338,12 @@ pub async fn enrich_metadata(
     let corrected_title = track_data.name.clone();
     let corrected_artist = track_data.artist.name.clone();
     let album = track_data.album.as_ref().map(|a| a.title.clone());
-    let album_artist = track_data
-        .album
-        .as_ref()
-        .map(|a| a.artist.clone());
+    let album_artist = track_data.album.as_ref().map(|a| a.artist.clone());
+    let duration = track_data
+        .duration
+        .as_deref()
+        .and_then(|s| s.parse::<i64>().ok())
+        .map(|ms| ms / 1000);
 
     eprintln!("[lastfm] corrected: title=\"{corrected_title}\" artist=\"{corrected_artist}\" album={album:?}");
 
@@ -470,8 +422,7 @@ pub async fn enrich_metadata(
 
             if path.exists() {
                 if let Some(path_str) = path.to_str() {
-                    if let Ok(_) = database::update_track_thumbnail(app, track_id, path_str) {
-                    }
+                    if let Ok(_) = database::update_track_thumbnail(app, track_id, path_str) {}
                 }
             }
         }
@@ -487,13 +438,11 @@ pub async fn enrich_metadata(
         genre_tags,
         lastfm_url,
         lastfm_id,
+        duration,
     })
 }
 
-pub async fn enrich_track(
-    app: &AppHandle,
-    track: &Track,
-) -> Result<EnrichedData, String> {
+pub async fn enrich_track(app: &AppHandle, track: &Track) -> Result<EnrichedData, String> {
     enrich_metadata(
         app,
         track.id,

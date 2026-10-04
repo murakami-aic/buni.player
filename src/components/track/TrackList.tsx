@@ -6,10 +6,16 @@ import { usePlayerStore } from "../../stores/playerStore";
 import { usePlaylistStore, GLOBAL_PLAYLIST_ID } from "../../stores/playlistStore";
 import { useFilteredTracks } from "../../hooks/useFilteredTracks";
 import type { SortBy, SortOrder } from "../../stores/libraryStore";
+import type { Track } from "../../types/track";
 import { useSticky } from "../../hooks/useSticky";
+import { formatDuration } from "../../utils/format";
+import { invokeUpdateTrack } from "../../services/tauri";
+import { useToastStore } from "../../stores/toastStore";
+import { errorMessage } from "../../utils/error";
 import { Dropdown } from "../ui/Dropdown";
 import { PlaylistMosaic } from "../playlist/PlaylistMosaic";
 import { TrackRow } from "./TrackRow";
+import { Modal } from "../ui/Modal";
 
 export function TrackList() {
   const { t } = useTranslation();
@@ -138,6 +144,65 @@ export function TrackList() {
       await downloadTrack(t.id);
     }
   }, [streamingTracks, downloadTrack]);
+
+  const [editing, setEditing] = useState(false);
+  const [editTrack, setEditTrack] = useState<Track | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editArtist, setEditArtist] = useState("");
+  const [editAlbum, setEditAlbum] = useState("");
+  const [editDuration, setEditDuration] = useState("");
+
+  const openEdit = useCallback((track: Track) => {
+    setEditTrack(track);
+    setEditTitle(track.title);
+    setEditArtist(track.artist ?? "");
+    setEditAlbum(track.album ?? "");
+    setEditDuration(track.duration != null ? formatDuration(track.duration) : "");
+    setSaving(false);
+    setEditing(true);
+  }, []);
+
+  const closeEdit = useCallback(() => {
+    if (saving) return;
+    setEditing(false);
+  }, [saving]);
+
+  const handleSaveEdit = async () => {
+    if (!editTitle.trim() || saving) return;
+    setSaving(true);
+    try {
+      let duration: number | undefined;
+      const trimmed = editDuration.trim();
+      if (trimmed) {
+        const parts = trimmed.split(":");
+        if (parts.length === 2) {
+          const min = parseInt(parts[0], 10);
+          const sec = parseInt(parts[1], 10);
+          if (!isNaN(min) && !isNaN(sec) && min >= 0 && sec >= 0) {
+            duration = min * 60 + sec;
+          }
+        } else if (parts.length === 1) {
+          const sec = parseInt(parts[0], 10);
+          if (!isNaN(sec) && sec >= 0) duration = sec;
+        }
+      }
+      const updated = await invokeUpdateTrack(
+        editTrack!.id,
+        editTitle.trim(),
+        editArtist.trim() || undefined,
+        editAlbum.trim() || undefined,
+        duration,
+      );
+      useLibraryStore.getState().applyTrackUpdated(updated);
+      usePlaylistStore.getState().updateTrackLocally(updated.id, updated);
+      setEditing(false);
+    } catch (err) {
+      useToastStore.getState().addToast("error", errorMessage(err, "Unknown error"));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <section className="@container text-neutral flex flex-1 flex-col pt-0 min-w-90 layout-component scroll-area cursor-default overflow-x-hidden overflow-y-auto ">
@@ -324,7 +389,7 @@ export function TrackList() {
       <div ref={sentinelRef} style={{ height: 1 }}></div>
 
       <div className={`ml-2 pr-2 py-2 sticky top-0 z-10 ${isStuck ? 'glass-sticky rounded-md' : 'bg-transparent'} grid grid-cols-[auto_2fr_2fr_auto_auto_auto]  @[600px]:grid-cols-[auto_2fr_2fr_2fr_auto_auto_auto] @[900px]:grid-cols-[auto_1fr_1fr_1fr_auto_auto_auto_auto] items-center`}>
-        <h2 className="text-xs font-medium w-6 text-center">#</h2>
+        <h2 className="text-xs font-medium w-8 text-center">#</h2>
         <h2 className="col-span-2 text-xs font-medium">{t("tracklist.title")}</h2>
         <h2 className="hidden @[600px]:block text-xs font-medium">{t("tracklist.album")}</h2>
         <h2 className="hidden @[900px]:block text-xs w-20 font-medium">{t("tracklist.scrobbles")}</h2>
@@ -344,9 +409,66 @@ export function TrackList() {
             index={index}
             isCurrent={track.id === currentTrack?.id}
             isPlaying={isPlaying && track.id === currentTrack?.id}
+            onEdit={openEdit}
           />
         ))}
       </div>
+
+      <Modal open={editing} onClose={closeEdit}>
+        <h2 className="text-lg font-bold mb-4">{t("track.edit_info")}</h2>
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs">{t("tracklist.title")}</span>
+            <input
+              autoFocus
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="w-full px-2 py-1 bg-transparent border border-accent rounded outline-none text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs">{t("trackinfo.artist")}</span>
+            <input
+              value={editArtist}
+              onChange={(e) => setEditArtist(e.target.value)}
+              className="w-full px-2 py-1 bg-transparent border border-accent rounded outline-none text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs">{t("tracklist.album")}</span>
+            <input
+              value={editAlbum}
+              onChange={(e) => setEditAlbum(e.target.value)}
+              className="w-full px-2 py-1 bg-transparent border border-accent rounded outline-none text-sm"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs">{t("trackinfo.duration")}</span>
+            <input
+              value={editDuration}
+              onChange={(e) => setEditDuration(e.target.value)}
+              placeholder="mm:ss"
+              className="w-full px-2 py-1 bg-transparent border border-accent rounded outline-none text-sm"
+            />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={closeEdit}
+            disabled={saving}
+            className="px-3 py-1 rounded text-sm cursor-pointer hover:bg-accent-list transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {t("track.edit_cancel")}
+          </button>
+          <button
+            onClick={handleSaveEdit}
+            disabled={!editTitle.trim() || saving}
+            className="px-3 py-1 rounded text-sm bg-accent text-accent-foreground cursor-pointer hover:opacity-80 transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {t("track.edit_save")}
+          </button>
+        </div>
+      </Modal>
 
     </section>
   );

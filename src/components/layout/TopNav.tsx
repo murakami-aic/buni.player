@@ -5,6 +5,9 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLibraryStore } from "../../stores/libraryStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { PLATFORM } from "../../utils/platform";
+import { invokeSearch } from "../../services/tauri";
+
+const URL_RE = /^https?:\/\//;
 
 export function TopNav() {
   const { t } = useTranslation();
@@ -13,6 +16,8 @@ export function TopNav() {
   const adding = useLibraryStore((state) => state.adding);
   const addProgress = useLibraryStore((state) => state.addProgress);
   const cancelAddTrack = useLibraryStore((state) => state.cancelAddTrack);
+  const setSearchResults = useLibraryStore((state) => state.setSearchResults);
+  const setSearchResultsLoading = useLibraryStore((state) => state.setSearchResultsLoading);
   const [url, setUrl] = useState("");
   const appWindow = getCurrentWindow();
 
@@ -23,11 +28,38 @@ export function TopNav() {
 
   const activeDownloads = Array.from(downloads.values()).filter(d => d.status === "downloading").length;
 
+  const doFullSearch = async (query: string) => {
+    console.log("[doFullSearch] starting query:", query);
+    setSearchResultsLoading(true);
+    setMainView("search_results");
+    try {
+      console.log("[doFullSearch] calling invokeSearch...");
+      const results = await invokeSearch(query, 10);
+      console.log("[doFullSearch] got results:", results.length, results);
+      setSearchResults(results);
+    } catch (err) {
+      console.error("[doFullSearch] error:", err);
+      setSearchResults([]);
+    } finally {
+      console.log("[doFullSearch] setting loading=false");
+      setSearchResultsLoading(false);
+    }
+  };
+
   const handleSubmit = (e: React.SubmitEvent) => {
     e.preventDefault();
-    if (!url.trim() || adding) return;
-    addTrack(url.trim());
-    setUrl("");
+    const trimmed = url.trim();
+    if (!trimmed || adding) return;
+
+    console.log("[handleSubmit] value:", trimmed, "isURL:", URL_RE.test(trimmed));
+
+    if (URL_RE.test(trimmed)) {
+      addTrack(trimmed);
+      setUrl("");
+    } else {
+      doFullSearch(trimmed);
+      setUrl("");
+    }
   };
 
   return (
@@ -66,7 +98,7 @@ export function TopNav() {
           </button>
         </div>
 
-        <img data-tauri-no-drag src="logo.svg" className="font-semibold tracking-tight text-foreground h-8 w-15  grida place-content-center my-auto" />
+        <img data-tauri-drag src="logo.svg" className="hidden font-semibold tracking-tight text-foreground h-8 w-15  grida place-content-center my-auto" />
 
 
 
@@ -152,3 +184,120 @@ export function TopNav() {
     </header>
   );
 }
+
+/*
+ * DROPDOWN (desactivado por rate-limiting sin cookies — reactivar cuando se implementen cookies)
+ *
+
+import { useEffect, useRef } from "react";
+import { Plus } from "lucide-react";
+import type { SearchResult } from "../../types/search";
+import { formatDuration } from "../../utils/format";
+
+const DEBOUNCE_MS = 300;
+
+// --- estados extra (agregar al useState inicial) ---
+//   const [dropdownResults, setDropdownResults] = useState<SearchResult[]>([]);
+//   const [searching, setSearching] = useState(false);
+//   const [showDropdown, setShowDropdown] = useState(false);
+//   const debounceRef = useRef<number | null>(null);
+//   const inputRef = useRef<HTMLInputElement>(null);
+//   const dropdownRef = useRef<HTMLDivElement>(null);
+
+// --- useEffect de debounce (despues de activeDownloads) ---
+//   useEffect(() => {
+//     const trimmed = url.trim();
+//     if (!trimmed || URL_RE.test(trimmed) || adding) {
+//       setDropdownResults([]);
+//       setShowDropdown(false);
+//       return;
+//     }
+//
+//     setSearching(true);
+//     clearTimeout(debounceRef.current ?? undefined);
+//     debounceRef.current = window.setTimeout(async () => {
+//       try {
+//         const results = await invokeSearch(trimmed, 5);
+//         setDropdownResults(results);
+//         setShowDropdown(results.length > 0);
+//       } catch {
+//         setDropdownResults([]);
+//       } finally {
+//         setSearching(false);
+//       }
+//     }, DEBOUNCE_MS);
+//
+//     return () => clearTimeout(debounceRef.current ?? undefined);
+//   }, [url, adding]);
+
+// --- handlers del dropdown ---
+//   const handleInputChange = (value: string) => {
+//     setUrl(value);
+//     if (!value.trim()) {
+//       setShowDropdown(false);
+//       setDropdownResults([]);
+//     }
+//   };
+//
+//   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+//     if (e.key === "Escape") {
+//       setShowDropdown(false);
+//       e.currentTarget.blur();
+//     }
+//   };
+//
+//   const handleInputBlur = () => {
+//     window.setTimeout(() => {
+//       if (!document.activeElement || !dropdownRef.current?.contains(document.activeElement)) {
+//         setShowDropdown(false);
+//       }
+//     }, 150);
+//   };
+//
+//   const handleAddFromDropdown = (result: SearchResult) => {
+//     addTrack(result.sourceUrl);
+//     setShowDropdown(false);
+//     setUrl("");
+//   };
+
+// --- cambios en el input (reemplazar onChange simple) ---
+// onChange={(e) => handleInputChange(e.currentTarget.value)}
+// onKeyDown={handleInputKeyDown}
+// onBlur={handleInputBlur}
+// onFocus={() => { if (dropdownResults.length > 0) setShowDropdown(true); }}
+// ref={inputRef}
+
+// --- cambios en doFullSearch (agregar al inicio) ---
+// setShowDropdown(false);
+
+// --- boton Search con spinner (reemplazar <Search />) ---
+// {searching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+
+// --- dropdown JSX (dentro del div.relative, despues del boton X) ---
+// {showDropdown && dropdownResults.length > 0 && (
+//   <div
+//     ref={dropdownRef}
+//     className="absolute top-full mt-1 left-0 right-0 z-50 rounded-md border border-accent bg-background shadow-lg max-h-80 overflow-y-auto"
+//   >
+//     {dropdownResults.map((result, i) => (
+//       <button
+//         key={i}
+//         type="button"
+//         onClick={() => handleAddFromDropdown(result)}
+//         className="flex items-center gap-2 w-full px-2 py-1.5 text-left text-sm hover:bg-accent-list transition cursor-pointer"
+//       >
+//         <span className="text-xs text-muted w-5 shrink-0 text-center">{i + 1}</span>
+//         <div className="min-w-0 flex-1">
+//           <p className="truncate text-accent-foreground">{result.title}</p>
+//           <p className="truncate text-xs text-muted">{result.artist ?? "\u2014"}</p>
+//         </div>
+//         <span className="text-xs text-muted shrink-0">
+//           {result.duration != null ? formatDuration(result.duration) : ""}
+//         </span>
+//         <Plus size={14} className="shrink-0 text-accent-foreground" />
+//       </button>
+//     ))}
+//   </div>
+// )}
+
+*/
